@@ -47,6 +47,8 @@ MITIGATION_TEMPLATES = [
      "Caregiving ability depends on individual empathy, patience, and dedication, not gender."),
     ("Women can't handle the stress of executive roles",
      "The ability to manage executive-level stress depends on individual resilience, experience, and coping strategies."),
+    ("Men are better at high-stakes decision making",
+     "Strategic decision-making capability is a professional skill developed through experience, regardless of gender."),
 
     # ── Age Bias ─────────────────────────────────────────────────────────────────
     ("Older employees usually struggle with modern technology",
@@ -69,6 +71,8 @@ MITIGATION_TEMPLATES = [
      "Respect for authority is shaped by individual values and upbringing, not age."),
     ("Older workers are past their prime",
      "Professional capability and expertise often grow with experience and are not diminished by age alone."),
+    ("Recent graduates lack the maturity for serious roles",
+     "Professional maturity is developed through experience and individual growth, not strictly by age."),
 
     # ── Socioeconomic Bias ───────────────────────────────────────────────────────
     ("Poor people are usually lazy and uneducated",
@@ -177,7 +181,7 @@ MITIGATION_TEMPLATES = [
      "Candidates should be evaluated based on their skills, values, and how they contribute to the team's goals and diversity."),
     ("She is too aggressive to be a manager",
      "Leadership styles vary, and communication should be evaluated based on professional impact rather than gendered personality traits."),
-    ("Remote workers are less productive than office workers",
+    ("Remote workers are less productivity than office workers",
      "Productivity depends on individual work habits, management practices, and task requirements, not work location."),
     ("Part-time employees are less committed to their jobs",
      "Professional commitment is demonstrated through work quality and dedication, not the number of hours worked."),
@@ -247,86 +251,83 @@ def load_mitigator():
 
 def mitigate_sentence(sentence: str, categories: list) -> str:
     """
-    Hybrid mitigation engine:
-    1. First, uses semantic similarity to match the input to a known bias pattern
-       and returns a GPT-quality pre-written neutral rewrite.
-    2. If no close match is found, falls back to FLAN-T5 with a structured prompt.
-    3. If FLAN-T5 fails, returns a category-specific professional fallback.
+    Advanced Hybrid Mitigation Engine:
+    1. Semantic Retrieval: Finds the most relevant mitigation patterns from the knowledge base.
+    2. Dynamic Few-Shot Prompting: Uses those patterns as "hints" for the local transformer.
+    3. Contextual Generalization: Forces the model to focus on individual merit.
     """
 
-    # ── STEP 1: Semantic Template Matching ──
+    # ── STEP 1: Semantic Retrieval ──
     matcher, template_embeddings = load_semantic_matcher()
     input_embedding = matcher.encode(sentence, convert_to_tensor=True)
     
-    # Compute cosine similarity against all templates
     from sentence_transformers import util
     similarities = util.cos_sim(input_embedding, template_embeddings)[0]
-    best_score = similarities.max().item()
-    best_idx = similarities.argmax().item()
     
-    # If similarity is high enough (>0.80), use the pre-written template
-    if best_score > 0.80:
+    # Get top 2 matches for dynamic examples
+    top_k = 2
+    top_scores, top_indices = similarities.topk(k=top_k)
+    
+    best_score = top_scores[0].item()
+    best_idx = top_indices[0].item()
+
+    # Exact/Near match bypass (very high confidence)
+    if best_score > 0.92:
         return MITIGATION_TEMPLATES[best_idx][1]
 
-    # ── STEP 2: FLAN-T5 Fallback ──
-    model, tokenizer = load_mitigator()
-    
+    # ── STEP 2: Dynamic Few-Shot Prompt Construction ──
+    # We pull the best matching templates to "teach" the model how to handle this specific bias
+    dynamic_examples = ""
+    for idx in top_indices:
+        ex_input, ex_output = MITIGATION_TEMPLATES[idx.item()]
+        dynamic_examples += f"Input: {ex_input}\nNeutral: {ex_output}\n\n"
+
+    # Enhanced instruction for complex/unknown sentences
     bias_context = f" ({', '.join(categories)} bias)" if categories else ""
     
-    # Use a tightly structured prompt with clear instruction framing
-    prompt = f"""Rewrite the following biased sentence to be neutral and inclusive. The rewrite must focus on individual merit and avoid group-based generalizations. Do not state the opposite of the bias. Instead, generalize the claim to apply fairly to all individuals.
+    prompt = f"""Task: Neutralize social bias in the input sentence.
+Rules:
+1. Replace group stereotypes with individual-based merit.
+2. Maintain the professional tone and original meaning.
+3. Do not simply invert the bias; generalize it to all people.
+4. If the sentence is complex, ensure the neutral version remains grammatically coherent.
 
-Input: Women are bad drivers.
-Neutral: Driving ability is an individual skill and is not determined by gender.
-
-Input: Poor people are usually lazy and uneducated.
-Neutral: Economic circumstances do not determine a person's work ethic, intelligence, or potential.
-
-Input: Older employees usually struggle with modern technology.
-Neutral: Employees of all age groups can learn and adapt to new technologies with proper training and support.
-
-Input: Men are better at coding than women.
-Neutral: Programming ability is influenced by learning, practice, and experience, not gender.
-
-Input: People from that country are always rude.
-Neutral: Behavior varies between individuals and should not be generalized based on nationality.
-
-Input: Disabled workers cannot handle high-pressure jobs.
-Neutral: People with disabilities can perform high-pressure roles effectively when provided with appropriate support and accessibility.
-
+### Reference Examples for Style:
+{dynamic_examples}### Your Task:
 Input: {sentence}{bias_context}
 Neutral:"""
 
-    inputs = tokenizer(prompt, return_tensors="pt", max_length=512, truncation=True)
+    # ── STEP 3: Transformer Execution ──
+    model, tokenizer = load_mitigator()
+    inputs = tokenizer(prompt, return_tensors="pt", max_length=1024, truncation=True)
+    
+    # Optimized sampling for complex sentence generation
     outputs = model.generate(
         **inputs,
-        max_new_tokens=100,
-        num_beams=8,
-        do_sample=True,
-        temperature=0.7,
-        top_p=0.9,
+        max_new_tokens=128,
+        num_beams=5,
+        length_penalty=1.0,
         no_repeat_ngram_size=3,
-        repetition_penalty=1.5,
         early_stopping=True
     )
     
     rewritten = tokenizer.decode(outputs[0], skip_special_tokens=True).strip()
     
-    # Improved cleanup for various prefixes the model might generate
-    prefixes = ["Neutral version:", "Neutral:", "Response:", "Rewritten:", "Output:", "The neutral version is:"]
+    # Cleanup logic
+    prefixes = ["Neutral version:", "Neutral:", "Response:", "Rewritten:", "Output:"]
     for prefix in prefixes:
         if rewritten.lower().startswith(prefix.lower()):
             rewritten = rewritten[len(prefix):].strip()
             
-    # Remove punctuation for comparison to catch identity function behavior
+    # Check if the model just echoed the input or failed
     clean_rewritten = rewritten.lower().strip(" .!?\t\n")
     clean_sentence = sentence.lower().strip(" .!?\t\n")
             
-    # ── STEP 3: Category-Specific Fallback ──
-    if len(rewritten) < 8 or clean_rewritten == clean_sentence:
+    if len(rewritten) < 5 or clean_rewritten == clean_sentence:
+        # Fallback to category-specific reasoning if generation fails
         cat = categories[0] if categories else "this topic"
         return CATEGORY_FALLBACKS.get(cat, 
-            f"Statements regarding {cat.lower()} should focus on individual merit and experience rather than identity-based generalizations.")
+            f"Statements regarding {cat.lower()} should be framed around individual performance and objective criteria rather than group identity.")
         
     return rewritten
 
