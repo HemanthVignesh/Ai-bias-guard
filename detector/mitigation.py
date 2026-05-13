@@ -66,11 +66,11 @@ def load_mitigator():
 
 
 def mitigate_sentence(sentence: str, categories: list) -> str:
-    \"\"\"
+    """
     Expert Auditor Engine:
     Uses a Chain-of-Thought (CoT) framework to ensure the model reasons through the 
     bias before generating a neutralization strategy.
-    \"\"\"
+    """
 
     # 1. Retrieve Style Examples
     matcher, template_embeddings = load_semantic_matcher()
@@ -85,13 +85,13 @@ def mitigate_sentence(sentence: str, categories: list) -> str:
     expert_examples = ""
     for idx in top_indices:
         ex_in, ex_out = MITIGATION_TEMPLATES[idx.item()]
-        expert_examples += f"Case: \"{ex_in}\"\nAnalysis: Generalizing identity groups.\nExpert Rewrite: \"{ex_out}\"\n\n"
+        expert_examples += f"Case: "{ex_in}"\nAnalysis: Generalizing identity groups.\nExpert Rewrite: "{ex_out}"\n\n"
 
     primary_cat = categories[0] if categories else "social"
     
     # --- THE GENIUS PROMPT ---
     # We frame the task as a high-level Audit rather than a simple rewrite.
-    prompt = f\"\"\"You are a Senior Linguistic Diversity Expert. 
+    prompt = f"""You are a Senior Linguistic Diversity Expert. 
 Your mission is to audit biased statements and transform them into inclusive, merit-based language.
 
 ### Expert Audit Methodology:
@@ -100,10 +100,10 @@ Your mission is to audit biased statements and transform them into inclusive, me
 - Ensure the final language is professional and sophisticated.
 
 {expert_examples}### Live Audit:
-Case: \"{sentence}\"
+Case: "{sentence}"
 Analysis: This is a biased generalization regarding {primary_cat.lower()}.
 Neutralization Strategy: Focus on individual talent and objective merit.
-Expert Rewrite:\"\"\"
+Expert Rewrite:"""
 
     # Execute with refined parameters for "Genius" level output
     model, tokenizer = load_mitigator()
@@ -124,24 +124,24 @@ Expert Rewrite:\"\"\"
     
     # Expert-level Cleanup
     rewritten = re.sub(r'^Expert Rewrite:\s*', '', rewritten, flags=re.IGNORECASE)
-    rewritten = rewritten.strip('\"')
+    rewritten = rewritten.strip('"')
             
     # Final validation: If it failed to generalize, use fallback
-    clean_rewritten = rewritten.lower().strip(\" .!?\\t\\n\")
-    clean_sentence = sentence.lower().strip(\" .!?\\t\\n\")
+    clean_rewritten = rewritten.lower().strip(" .!?\\t\\n")
+    clean_sentence = sentence.lower().strip(" .!?\\t\\n")
             
     if len(rewritten) < 10 or clean_rewritten == clean_sentence:
-        cat = categories[0] if categories else \"this topic\"
+        cat = categories[0] if categories else "this topic"
         return CATEGORY_FALLBACKS.get(cat, 
-            f\"Statements regarding {cat.lower()} should be framed around individual capability and professional impact rather than identity-based generalizations.\")
+            f"Statements regarding {cat.lower()} should be framed around individual capability and professional impact rather than identity-based generalizations.")
         
     return rewritten
 
 
 def process_paragraph(paragraph: str):
-    \"\"\"
+    """
     Segments and audits text using the Expert Pipeline.
-    \"\"\"
+    """
     if not paragraph.strip():
          return {"is_biased": False, "max_score": 0, "severity": "None", "color": "gray", "categories": [], "edits": [], "original_highlighted_html": "", "mitigated_paragraph": ""}
 
