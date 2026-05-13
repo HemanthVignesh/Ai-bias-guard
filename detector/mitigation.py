@@ -230,7 +230,7 @@ CATEGORY_FALLBACKS = {
 # ─── SEMANTIC MATCHING ENGINE ───────────────────────────────────────────────────
 @st.cache_resource
 def load_semantic_matcher():
-    """Loads a lightweight sentence-transformer for matching input to templates."""
+    \"\"\"Loads a lightweight sentence-transformer for matching input to templates.\"\"\"
     from sentence_transformers import SentenceTransformer
     model = SentenceTransformer('all-MiniLM-L6-v2')
     # Pre-encode all template patterns
@@ -240,7 +240,7 @@ def load_semantic_matcher():
 
 @st.cache_resource
 def load_mitigator():
-    """Loads FLAN-T5-base as a fallback for novel sentences."""
+    \"\"\"Loads FLAN-T5-base as a fallback for novel sentences.\"\"\"
     from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
     model_name = "google/flan-t5-base"
     tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -250,12 +250,12 @@ def load_mitigator():
 
 
 def mitigate_sentence(sentence: str, categories: list) -> str:
-    """
+    \"\"\"
     Advanced Hybrid Mitigation Engine:
     1. Semantic Retrieval: Finds the most relevant mitigation patterns from the knowledge base.
     2. Dynamic Few-Shot Prompting: Uses those patterns as "hints" for the local transformer.
     3. Contextual Generalization: Forces the model to focus on individual merit.
-    """
+    \"\"\"
 
     # ── STEP 1: Semantic Retrieval ──
     matcher, template_embeddings = load_semantic_matcher()
@@ -282,32 +282,28 @@ def mitigate_sentence(sentence: str, categories: list) -> str:
         ex_input, ex_output = MITIGATION_TEMPLATES[idx.item()]
         dynamic_examples += f"Input: {ex_input}\nNeutral: {ex_output}\n\n"
 
-    # Enhanced instruction for complex/unknown sentences
-    bias_context = f" ({', '.join(categories)} bias)" if categories else ""
+    # Simplified, high-impact prompt for smaller local models
+    primary_cat = categories[0] if categories else "social"
     
-    prompt = f"""Task: Neutralize social bias in the input sentence.
-Rules:
-1. Replace group stereotypes with individual-based merit.
-2. Maintain the professional tone and original meaning.
-3. Do not simply invert the bias; generalize it to all people.
-4. If the sentence is complex, ensure the neutral version remains grammatically coherent.
+    prompt = f\"\"\"Neutralize the following {primary_cat.lower()} bias. 
+Focus on individual merit. Use a professional tone.
 
-### Reference Examples for Style:
-{dynamic_examples}### Your Task:
-Input: {sentence}{bias_context}
-Neutral:"""
+### Examples:
+{dynamic_examples}### Task:
+Input: {sentence}
+Neutral:\"\"\"
 
     # ── STEP 3: Transformer Execution ──
     model, tokenizer = load_mitigator()
-    inputs = tokenizer(prompt, return_tensors="pt", max_length=1024, truncation=True)
+    inputs = tokenizer(prompt, return_tensors="pt", max_length=512, truncation=True)
     
-    # Optimized sampling for complex sentence generation
+    # Focused generation for accuracy over length
     outputs = model.generate(
         **inputs,
-        max_new_tokens=128,
-        num_beams=5,
-        length_penalty=1.0,
-        no_repeat_ngram_size=3,
+        max_new_tokens=64,
+        num_beams=8,
+        no_repeat_ngram_size=2,
+        repetition_penalty=1.2,
         early_stopping=True
     )
     
@@ -320,23 +316,23 @@ Neutral:"""
             rewritten = rewritten[len(prefix):].strip()
             
     # Check if the model just echoed the input or failed
-    clean_rewritten = rewritten.lower().strip(" .!?\t\n")
-    clean_sentence = sentence.lower().strip(" .!?\t\n")
+    clean_rewritten = rewritten.lower().strip(\" .!?\\t\\n\")
+    clean_sentence = sentence.lower().strip(\" .!?\\t\\n\")
             
     if len(rewritten) < 5 or clean_rewritten == clean_sentence:
         # Fallback to category-specific reasoning if generation fails
-        cat = categories[0] if categories else "this topic"
+        cat = categories[0] if categories else \"this topic\"
         return CATEGORY_FALLBACKS.get(cat, 
-            f"Statements regarding {cat.lower()} should be framed around individual performance and objective criteria rather than group identity.")
+            f\"Statements regarding {cat.lower()} should be framed around individual performance and objective criteria rather than group identity.\")
         
     return rewritten
 
 
 def process_paragraph(paragraph: str):
-    """
+    \"\"\"
     Segments paragraph into sentences, runs detection on each, and mitigates if biased.
     Returns full analysis payload.
-    """
+    \"\"\"
     if not paragraph.strip():
          return {"is_biased": False, "max_score": 0, "severity": "None", "color": "gray", "categories": [], "edits": [], "original_highlighted_html": "", "mitigated_paragraph": ""}
 
