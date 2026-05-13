@@ -85,7 +85,7 @@ def mitigate_sentence(sentence: str, categories: list) -> str:
     expert_examples = ""
     for idx in top_indices:
         ex_in, ex_out = MITIGATION_TEMPLATES[idx.item()]
-        expert_examples += f"Case: "{ex_in}"\nAnalysis: Generalizing identity groups.\nExpert Rewrite: "{ex_out}"\n\n"
+        expert_examples += f'Case: "{ex_in}"\nAnalysis: Generalizing identity groups.\nExpert Rewrite: "{ex_out}"\n\n'
 
     primary_cat = categories[0] if categories else "social"
     
@@ -127,8 +127,8 @@ Expert Rewrite:"""
     rewritten = rewritten.strip('"')
             
     # Final validation: If it failed to generalize, use fallback
-    clean_rewritten = rewritten.lower().strip(" .!?\\t\\n")
-    clean_sentence = sentence.lower().strip(" .!?\\t\\n")
+    clean_rewritten = rewritten.lower().strip(" .!?\t\n")
+    clean_sentence = sentence.lower().strip(" .!?\t\n")
             
     if len(rewritten) < 10 or clean_rewritten == clean_sentence:
         cat = categories[0] if categories else "this topic"
